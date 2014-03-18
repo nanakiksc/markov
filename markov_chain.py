@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
-#FIX: Only works with 2 states! Generalize to N states!
-# Implement transition matrix.
 from random import random
 
 class MarkovChain:
@@ -13,8 +11,12 @@ class MarkovChain:
 
     def __init__(self):
         """
+        Each state is represented by an index in the self.emission_probs and
+        self.transition_matrix lists. Thus the state 'n' contains a list of its
+        emission probabilities at self.emission_probs[n] and a list of its
+        transition probabilities at self.transition_matrix[n].
         """
-        
+
         self.emission_probs = []
         self.transition_matrix = []
         self.num_states = 0
@@ -22,12 +24,15 @@ class MarkovChain:
 
     def add_state(self, emission_probability, transition_probability):
         """
-        Each state is added as a list or tuple of length 2. The first element is
-        the emission probability of the state. The second element is the row of
-        the transition matrix corresponding to the state.
+        Each state is added with 2 arguments. The first argument are the
+        probabilities of the different emissions and is passed as a list or
+        tuple of length equal to the number of different emissions. The second
+        element is the row of the transition matrix corresponding to the state
+        and is passed as a list or tuple of lenght equal to the number of
+        different states.
         """
 
-        ep = float(emission_probability)
+        ep = [float(p) for p in emission_probability]
         self.emission_probs.append(ep)
 
         tp = [float(p) for p in transition_probability]
@@ -35,10 +40,15 @@ class MarkovChain:
         
         self.num_states += 1
 
-    def check_transition_matrix(self):
+    def check_chain(self):
         """
-        Check whether the size and values of the transition matrix make sense.
+        Check whether the size and values of the emission probability and
+        transition matrices make sense.
         """
+
+        for i, state in enumerate(self.emission_probs):
+            assert sum(state) == 1
+        assert i + 1 == self.num_states
 
         for i, state in enumerate(self.transition_matrix):
             assert sum(state) == 1
@@ -47,13 +57,16 @@ class MarkovChain:
 
     def emit(self):
         """
-        Make an emission based on the emission probability of the current state.
+        Make an emission based on the probabilities of the different emissions
+        in the current state.
         """
-
-        if random() < self.emission_probs[self.current_state]:
-            return 1
-        else:
-            return 0
+        
+        r = random()
+        acc = 0
+        for em, pr in enumerate(self.emission_probs[self.current_state]):
+            if acc <= r < acc + pr:
+                return em
+            acc += pr
 
     def transit(self):
         """
@@ -64,8 +77,9 @@ class MarkovChain:
         r = random()
         acc = 0
         for st, pr in enumerate(self.transition_matrix[self.current_state]):
-            if acc <= r < pr:
+            if acc <= r < acc + pr:
                 self.current_state = st
+                break
             acc += pr
 
     def run(self):
@@ -73,10 +87,10 @@ class MarkovChain:
         Check that everything makes sense, initialize the chain and run it.
         """
         
-        chain.check_transition_matrix()
+        self.check_chain()
 
         # Initalize current state of the Markov Chain.
-        chain.current_state = int(random() * self.num_states)
+        self.current_state = int(random() * self.num_states)
 
         while True:
             print self.emit()
@@ -88,7 +102,7 @@ if __name__ == '__main__':
     chain = MarkovChain()
 
     # Add the (not so) Hidden States.
-    chain.add_state(0.8, (0.9, 0.1)) # State 0
-    chain.add_state(0.05, (0.15, 0.85)) # State 1
+    chain.add_state((0.2, 0.8), (0.9, 0.1)) # State 0
+    chain.add_state((0.95, 0.05), (0.15, 0.85)) # State 1
     
     chain.run()
