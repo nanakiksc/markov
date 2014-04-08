@@ -5,7 +5,7 @@ import numpy
 
 class ForBack():
     """
-    Implementation of the forward and backward algorithms.
+    Implementation of the forward, backward and Viterbi algorithms.
     """
 
     def __init__(self, pi, e, Q, x):
@@ -75,26 +75,73 @@ class ForBack():
         return betas
 
     def viterbi(self, max_k):
+        """
+        Viterbi algorithm.
+        The phi matrix is the scalar product of alpha and beta matrices and
+        represents the probability of the model being in a particular state y at
+        step k (use log score to avoid underflow issues).
+        The M matrix stores the log score for each step k.
+        The Y vector stores the states with higher log score for each step k,
+        and thus represents the most probable path.
+        """
+
         alphas = self.forward(max_k)
         betas = self.backward(max_k, alphas)
         phi = alphas * betas
-        lphi = log(phi)
+        #lphi = numpy.log(phi)
+        #le = numpy.log(self.e)
         lQ = numpy.log(self.Q)
+        num_states = numpy.ndim(lQ)
 
-        #there
-        #Mk+1(y)=argmax(z<=m){Mk(z).Q(z,y)}+log(phik+1|n(y))
-        #and back again
-        #yk=argmax(z<=m){Mk(y)+log(Q(z,y+1))}
+        # Create M scores matrix. (There...)
+        # Mk+1(y)=max(z<=m){Mk(z)+log(Q(z,y))}+log(phik+1|n(y))
+
+        # Initialize M scores matrix.
+        M = numpy.zeros((max_k, 2))
+        M[0] = numpy.log(self.g(0))#lphi[0]
+        #M[0], curr_state = max(((lphi[0][s], s) for s in xrange(num_states)))
         
+        # And fill the M scores matrix.
+        for k in xrange(1, max_k):
+            M[k] = [max((M[k-1][z] + lQ[z][y]
+                         for z in xrange(num_states)))
+                    for y in xrange(num_states)] + numpy.log(self.g(k))
+
+        # Create most probable states matrix. (... and back again)
+        # yk=argmax(z<=m){Mk(y)+log(Q(z,y(k+1)))}
+
+        # Initialize Y states vector.
+        Y = [0] * max_k
+        max_k -= 1
+        __, Y[max_k] = max(((M[max_k][y], y) for y in xrange(num_states)))
+
+        # And fill the Y states vector.
+        for k in xrange(max_k-1, -1, -1):
+            __, Y[k] = max(((M[k][y] + lQ[y][Y[k+1]], y)
+                            for y in xrange(num_states)))
+
+        # Return the most probable sequence of states.
+        return Y
+
 
 if __name__ == '__main__':
+    observations = [int(l) for l in open('simulated_markov_exercise.txt')]
     fb = ForBack(
             pi=(0.5, 0.5),
-            e=(0.3, 0.7),
-            Q=1,
-            x=[int(l) for l in open('simulated_markov_exercise.txt')]
-            )
+            e=(0.001, 0.999),
+            Q=None,
+            x=observations)
     #for i in xrange(len(x)):
     #    print forward(i)
     #print fb.forward(1000)
-    print fb.backward(1000)
+    #viterbi_output = fb.viterbi(1000)
+    #print viterbi_output
+    viterbi_output = fb.viterbi(len(observations))
+    comparison = [viterbi_output[i] == observations[i] for i in xrange(len(observations))]
+    t, f = 0, 0
+    for bol in comparison:
+        if bol:
+            t += 1
+        else:
+            f += 1
+    print t, f, t+f

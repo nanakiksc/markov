@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
+import sys
 from random import random
 
 class MarkovChain:
@@ -90,9 +91,10 @@ class MarkovChain:
                 break
             acc += pr
 
-    def run(self):
+    def run(self, steps=-1):
         """
-        Check that everything makes sense, initialize the chain and run it.
+        Check that everything makes sense, initialize the chain and run it steps
+        times. If steps is omitted or negative, the chain runs infinitely.
         """
 
         self.check_chain()
@@ -103,20 +105,24 @@ class MarkovChain:
         else:
             self.current_state = int(random() * self.num_states)
 
-        while 1:
-        #for i in xrange(10**5):
+        steps = int(steps)
+        while steps:
+            steps -= 1
             print self.emit()
             self.transit(self.transition_matrix[self.current_state])
-
+                
 
 if __name__ == '__main__':
 
     # Create the Markov chain with the (optional) initial state probabilities.
-    chain = MarkovChain((1,0,0))
+    chain = MarkovChain((1,0))
 
     # Add the (not so) Hidden States.
-    chain.add_state((1, 0, 0), (0, 1, 0)) # State 0
-    chain.add_state((0, 1, 0), (0.5, 0.2, 0.3)) # State 1
-    chain.add_state((0, 0, 1), (0.3, 0.1, 0.6)) # State 2
+    chain.add_state((1, 0), (0.9, 0.1)) # State 0
+    chain.add_state((0, 1), (0.1, 0.9)) # State 1
+    #chain.add_state((0, 0, 1), (0.3, 0.1, 0.6)) # State 2
     
-    chain.run()
+    if len(sys.argv) > 1:
+        chain.run(int(sys.argv[1]))
+    else:
+        chain.run()
