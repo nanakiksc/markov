@@ -5,7 +5,7 @@ from random import random
 
 class MarkovChain:
     """
-    Create a first order Markov Chain that stores hidden states with different
+    Create a first order Markov chain that stores hidden states with different
     emission probabilities and transition probabilities.
     """
 
@@ -111,7 +111,7 @@ class MarkovChain:
 
 if __name__ == '__main__':
 
-    # Create the Markov Chain with the (optional) initial state probabilities.
+    # Create the Markov chain with the (optional) initial state probabilities.
     chain = MarkovChain((1,0,0))
 
     # Add the (not so) Hidden States.
