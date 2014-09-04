@@ -96,8 +96,9 @@ class Chain:
 
     def run(self, steps=-1):
         """
-        Check that everything makes sense, initialize the chain and run it steps
-        times. If steps is omitted or negative, the chain runs infinitely.
+        Check that everything makes sense, initialize the chain and run it
+        'steps' times. If 'steps' is omitted or negative, the chain will run
+        infinitely.
         """
 
         self.check_chain()
@@ -113,7 +114,6 @@ class Chain:
             print self.emit()
             self.transit(self.transitions[self.current_state])
             steps -= 1
-                
 
 # FIX g() function, generalize to multiple emissions.
 # Generalize also to multiple states.
