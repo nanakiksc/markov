@@ -2,7 +2,6 @@
 #-*- coding:utf-8 -*-
 
 from random import random
-import numpy
 
 class Chain:
     """
@@ -25,7 +24,7 @@ class Chain:
         self.emissions = []
         self.transitionsx = []
         self.num_emissions = 0
-        self.num_states = 0
+        self.num_states = len(self.initial_probs)
         self.current_state = None
 
     def add_state(self, emission_probability, transition_probability):
@@ -40,6 +39,9 @@ class Chain:
 
         ep = [float(p) for p in emission_probability]
         self.emissions.append(ep)
+        ne = len(emission_probability)
+        if ne > self.num_emissions:
+            self.num_emissions = ne
 
         tp = [float(p) for p in transition_probability]
         self.transitions.append(tp)

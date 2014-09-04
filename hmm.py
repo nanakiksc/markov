@@ -3,37 +3,78 @@
 
 # FIX g() function, generalize to multiple emissions.
 # Generalize also to multiple states.
-# Merge to markov_chain.py: merge the two __init__s, put everything else in
-# separate classes, one for the chain and one for the algorithms, so they are
-# isolated from one another.
 
-import numpy
-
-
+import numpy as np
 
 class HMM():
     """
-    Implementation of the forward, backward and Viterbi algorithms.
+    Implementation of the forward, backward, Viterbi and Baum-Welch algorithms.
     """
+    def __init__(self, x):
+        """
+        Define the observations vector (x). Class initialization expects a list
+        or tuple with 1 dimension and defines an horizontal vector (array).
+        """
+        
+        self.x = np.array(x)
+        self.num_states = None
+        self.num_emissions = None
+        #self.L = [] # Likelihood vector to be filled by forward().
 
-    def __init__(self, pi, p, q, Q, e, x):
-        # Probability of being at state pi[i] at time 0.
-        self.pi = numpy.array(list(pi))
-        # Emission probabilities.
-        self.e = e
-        # Non-transition probabilities.
-        self.p, self.q = p, q
-        # Transition matrix.
-        self.Q = numpy.array(
-                [
-                    [self.p, 1-self.p],
-                    [1-self.q, self.q]
-                    ]
-                )
-        # Series of observations.
-        self.x = list(x)
-        # Likelihood vector to be filled by forward().
-        self.L = []
+        assert len(np.shape(self.x)) == 1
+
+    def add_pi(self, pi):
+        """
+        Define the initial probabilities matrix (pi) of the model. That is, the
+        probability of being at state pi[i] at time 0. Expects a list or tuple
+        with 1 dimension and defines an horizontal vector (array).
+        """
+
+        self.pi = np.array(pi)
+
+        if self.num_states is None:
+            self.num_states == np.shape(self.pi)[0]
+        else:
+            assert np.shape(self.pi) == (self.num_states,)
+
+    def add_Q(self, Q):
+        """
+        Define the state transition probabilities matrix (pi) of the model.
+        Expects an M x M list or tuple and defines a square array.
+        """
+
+        self.Q = np.array(Q)
+
+        x, y = np.shape(self.Q)
+        assert x == y
+        if self.num_states is None:
+            self.num_states = x
+        else:
+            assert x == self.num_states
+
+    def add_e(self, e):
+        """
+        Define the emission probabilities matrix (e) of the model. Expects an
+        num_states x num_emissions list or tuple and defines an M x N array.
+        """
+
+        self.e = np.array(e)
+
+        x, y = np.shape(self.e)
+        if self.num_states is None:
+            self.num_states = x
+        else:
+            assert x == self.num_states
+        if self.num_emissions is None:
+            self.num_emissions = y
+        else:
+            assert y == self.num_emissions
+
+    def check_hmm(self):
+        """
+        Make some assertions about the sizes and values of the model matrices.
+        """
+        assert 1
 
     def g(self, k): # Needs to return column vectors. I don't think so...
         """
@@ -48,7 +89,7 @@ class HMM():
         elif self.x[k] == 1:
             # Probabilities of emitting.
             em = [e for e in self.e]
-        return numpy.array(em)
+        return np.array(em)
 
     def normalize_alpha(self, alpha):
         """
@@ -73,16 +114,16 @@ class HMM():
         it is that the model produced the sequence of observations x.
         """
         self.L = [] # Reinitialize self.L just in case.
-        alphas = numpy.zeros((max_k, 2))
+        alphas = np.zeros((max_k, 2))
 
         alpha = self.pi * self.g(0)
         alphas[0] = self.normalize_alpha(alpha)
 
         for k in xrange(1, max_k):
-            alpha = numpy.dot(alpha, self.Q) * self.g(k)
+            alpha = np.dot(alpha, self.Q) * self.g(k)
             alphas[k] = self.normalize_alpha(alpha)
 
-        return alphas, sum(numpy.log(self.L))
+        return alphas, sum(np.log(self.L))
             
     def backward(self, max_k=len(self.x)):
         """
@@ -92,17 +133,17 @@ class HMM():
         if not self.L:
             self.forward(max_k) # Generate self.L
 
-        betas = numpy.zeros((max_k, 2))
+        betas = np.zeros((max_k, 2))
         max_k -= 1
 
-        beta = numpy.ones((1, 2))
+        beta = np.ones((1, 2))
         betas[max_k] = beta
         
-        Qt = numpy.transpose(self.Q)
+        Qt = np.transpose(self.Q)
         for k in xrange(max_k-1, -1, -1):
             # Backward algorithm definition:
             # beta*k = (lk/lk+1) x Q . beta*k+1 x gk+1
-            beta = numpy.dot(beta, Qt) * self.g(k) / self.L[k] 
+            beta = np.dot(beta, Qt) * self.g(k) / self.L[k] 
             betas[k] = beta
 
         return betas
@@ -121,24 +162,24 @@ class HMM():
         alphas, __ = self.forward(max_k)
         betas = self.backward(max_k)
         phi = alphas * betas
-        #lphi = numpy.log(phi)
-        #le = numpy.log(self.e)
-        lQ = numpy.log(self.Q)
-        num_states = numpy.ndim(lQ)
+        #lphi = np.log(phi)
+        #le = np.log(self.e)
+        lQ = np.log(self.Q)
+        num_states = np.ndim(lQ)
 
         # Create M scores matrix. (There...)
         # Mk+1(y)=max(z<=m){Mk(z)+log(Q(z,y))}+log(phik+1|n(y))
 
         # Initialize M scores matrix.
-        M = numpy.zeros((max_k, 2))
-        M[0] = numpy.log(self.g(0))#lphi[0]
+        M = np.zeros((max_k, 2))
+        M[0] = np.log(self.g(0))#lphi[0]
         #M[0], curr_state = max(((lphi[0][s], s) for s in xrange(num_states)))
  
         # And fill the M scores matrix.
         for k in xrange(1, max_k):
             M[k] = [max((M[k-1][z] + lQ[z][y]
                          for z in xrange(num_states)))
-                    for y in xrange(num_states)] + numpy.log(self.g(k))
+                    for y in xrange(num_states)] + np.log(self.g(k))
 
         # Create most probable states matrix. (... and back again)
         # yk=argmax(z<=m){Mk(y)+log(Q(z,y(k+1)))}
@@ -176,8 +217,8 @@ class HMM():
         alphas, __ = self.forward(max_k)
         betas = self.backward(max_k)
         
-        phis = numpy.zeros((2, 2))
-        es = numpy.zeros(2)
+        phis = np.zeros((2, 2))
+        es = np.zeros(2)
         k=56
         print alphas
         print self.Q
@@ -185,10 +226,10 @@ class HMM():
         print betas
         """
         for k in xrange(0, max_k-1):
-            phi_k = numpy.dot(alphas[k], self.Q) * self.g(k+1) * betas[k+1]
+            phi_k = np.dot(alphas[k], self.Q) * self.g(k+1) * betas[k+1]
             phis += phi_k
 
-            e = numpy.dot(phi_k, self.g(k))
+            e = np.dot(phi_k, self.g(k))
             es += e
         """
         #self.Q = phis / sum(phis)
@@ -197,16 +238,8 @@ class HMM():
         #print self.Q
         #print self.e
 
-
 if __name__ == '__main__':
     observations = [int(l) for l in open('simulated_markov_exercise.txt')][:1000]
-    fb = HMM(
-            pi=(0.5, 0.5),
-            p=0.5,
-            q=0.8,
-            Q=None,
-            e=(0.1,0.9),
-            x=observations)
-
+    fb = HMM(observations)
 
     print fb.backward(len(observations))
