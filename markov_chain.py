@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
-import sys
 from random import random
 
 class MarkovChain:
@@ -113,6 +112,8 @@ class MarkovChain:
                 
 
 if __name__ == '__main__':
+
+    import sys
 
     # Create the Markov chain with the (optional) initial state probabilities.
     chain = MarkovChain((1,0))
