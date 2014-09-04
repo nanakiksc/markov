@@ -2,27 +2,29 @@
 #-*- coding:utf-8 -*-
 
 from random import random
+import numpy
 
 class Chain:
     """
-    Create a first order Markov chain that stores hidden states with different
-    emission probabilities and transition probabilities.
+    Create a first order discrete Markov chain that stores hidden states with
+    different emission and transition probabilities.
     """
 
     def __init__(self, initial_probs=[]):
         """
-        Each state is represented by an index in the self.emission_probs and
-        self.transition_matrix lists. Thus the state 'n' contains a list of its
-        emission probabilities at self.emission_probs[n] and a list of its
-        transition probabilities at self.transition_matrix[n]. The probability
+        Each state is represented by an index in the self.emissions and
+        self.transitions lists. Thus the state 'n' contains a list of its
+        emission probabilities at self.emissions[n] and a list of its
+        transition probabilities at self.transitions[n]. The probability
         of the chain starting at state 'n' (before the first transition is done)
         is given by self.initial_probs[n]. If self.initial_probs is an empty
         list (as by default), all states are equally probable.
         """
 
         self.initial_probs = [p for p in initial_probs]
-        self.emission_probs = []
-        self.transition_matrix = []
+        self.emissions = []
+        self.transitionsx = []
+        self.num_emissions = 0
         self.num_states = 0
         self.current_state = None
 
@@ -37,28 +39,29 @@ class Chain:
         """
 
         ep = [float(p) for p in emission_probability]
-        self.emission_probs.append(ep)
+        self.emissions.append(ep)
 
         tp = [float(p) for p in transition_probability]
-        self.transition_matrix.append(tp)
+        self.transitions.append(tp)
 
         self.num_states += 1
 
     def check_chain(self):
         """
-        Check whether the size and values of the emission probability and
+        Check whether the size and values of the emission and
         transition matrices make sense.
         """
 
         if self.initial_probs:
             assert sum(self.initial_probs) == 1
-            assert len(self.initial_probs) == len(self.transition_matrix)
+            assert len(self.initial_probs) == len(self.transitions)
 
-        for i, state in enumerate(self.emission_probs):
+        for i, state in enumerate(self.emissions):
             assert sum(state) == 1
+            assert len(state) == self.num_emissions
         assert i + 1 == self.num_states
 
-        for i, state in enumerate(self.transition_matrix):
+        for i, state in enumerate(self.transitions):
             assert sum(state) == 1
             assert len(state) == self.num_states
         assert i + 1 == self.num_states
@@ -71,7 +74,7 @@ class Chain:
 
         r = random()
         acc = 0
-        for em, pr in enumerate(self.emission_probs[self.current_state]):
+        for em, pr in enumerate(self.emissions[self.current_state]):
             if acc <= r < acc + pr:
                 return em
             acc += pr
@@ -92,8 +95,9 @@ class Chain:
 
     def run(self, steps=-1):
         """
-        Check that everything makes sense, initialize the chain and run it steps
-        times. If steps is omitted or negative, the chain runs infinitely.
+        Check that everything makes sense, initialize the chain and run it
+        'steps' times. If 'steps' is omitted or negative, the chain will run
+        infinitely.
         """
 
         self.check_chain()
@@ -106,10 +110,9 @@ class Chain:
 
         steps = int(steps)
         while steps:
-            steps -= 1
             print self.emit()
-            self.transit(self.transition_matrix[self.current_state])
-                
+            self.transit(self.transitions[self.current_state])
+            steps -= 1
 
 if __name__ == '__main__':
 
