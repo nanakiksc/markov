@@ -3,7 +3,7 @@
 
 from random import random
 
-class MarkovChain:
+class Chain:
     """
     Create a first order Markov chain that stores hidden states with different
     emission probabilities and transition probabilities.
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     import sys
 
     # Create the Markov chain with the (optional) initial state probabilities.
-    chain = MarkovChain((1,0))
+    chain = Chain((1,0))
 
     # Add the (not so) Hidden States.
     chain.add_state((1, 0), (0.9, 0.1)) # State 0
