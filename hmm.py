@@ -14,14 +14,25 @@ class HMM():
         """
         Define the observations vector (x). Class initialization expects a list
         or tuple with 1 dimension and defines an horizontal vector (array).
+        Variable names that will be used later are declared but not initialized.
         """
-        
+
         self.x = np.array(x)
+        self.max_k = np.shape(self.x)[0]
         self.num_states = None
         self.num_emissions = None
-        #self.L = [] # Likelihood vector to be filled by forward().
 
-        assert len(np.shape(self.x)) == 1
+        self.pi = None
+        self.Q = None
+        self.e = None
+
+        self.alphas = None
+        self.L = None
+        self.betas = None
+        self.M = None
+        self.Y = None
+
+        assert len(np.shape(self.x)) == 1 and self.max_k > 0
 
     def add_pi(self, pi):
         """
@@ -76,131 +87,117 @@ class HMM():
         """
         assert 1
 
-    def g(self, k): # Needs to return column vectors. I don't think so...
-        """
-        Return the probabilities of emmiting x[k] at step k for each state.
-        In the multiple emissions version, it should just query the emission
-        matrix e, or do ir directly from the caller function.
-        """
-        ##### FIX: Generalize to multiple emissions. #####
-        if self.x[k] == 0:
-            # Probabilities of NOT emitting.
-            em = [1-e for e in self.e]
-        elif self.x[k] == 1:
-            # Probabilities of emitting.
-            em = [e for e in self.e]
-        return np.array(em)
-
-    def normalize_alpha(self, alpha):
+    def __normalize_alpha(self, alpha, k):
         """
         Helper function for the Forward algorithm.
-        Normalize alpha to avoid underflow and fill the likelihood vector L.
+        Normalize alpha to avoid underflow and fill the likelihood vector (L).
         """
 
-        alpha_norm = sum(alpha) # L(k) / L(k+1)
-        self.L.append(alpha_norm)
+        alpha_norm = sum(alpha) # L(k+1) / L(k)
+        self.L[k] = alpha_norm
         alpha /= alpha_norm # Normalize alpha.
 
         return alpha
 
-    def forward(self, max_k=len(self.x)):
+    def forward(self):
         """
         Forward algorithm. Solve the Evaluation problem.
         Each row of alphas stores the probabilities of the model being in the
         different states at step k and producing the observations from 0 to k.
         Here, normalized alphas are used, meaning the probability *given* the
         observations.
-        Also return the log likelihood of the model tested, that is, how likely
-        it is that the model produced the sequence of observations x.
+        Also return the log likelihood of the model, that is, how likely it is
+        that the sequence of observations x has been produced by the model.
         """
-        self.L = [] # Reinitialize self.L just in case.
-        alphas = np.zeros((max_k, 2))
 
-        alpha = self.pi * self.g(0)
-        alphas[0] = self.normalize_alpha(alpha)
+        self.L = np.zeros(self.max_k) # Initialize the likelihood vector (L).
+        alphas = np.zeros((self.max_k, self.num_states)) # "Vertical" matrix.
 
-        for k in xrange(1, max_k):
-            alpha = np.dot(alpha, self.Q) * self.g(k)
-            alphas[k] = self.normalize_alpha(alpha)
+        alpha = self.pi * self.e[:, self.x[0]]
+        alphas[0] = self.__normalize_alpha(alpha, 0)
+
+        eps = np.finfo(np.float32).eps
+        for k in xrange(1, self.max_k):
+            alpha = np.dot(alphas[k-1], self.Q) * self.e[:, self.x[k]]
+            alphas[k] = self.__normalize_alpha(alpha, k)
+
+            assert abs(sum(alphas[k]) - 1.0) < eps
 
         return alphas, sum(np.log(self.L))
             
-    def backward(self, max_k=len(self.x)):
+    def backward(self):
         """
-        Complementary algorith used by viterbi() and baum_welsch().
-        Create a betas matrix that stores.
+        Complementary algorith used by the Viterbi and Baum-Welch algorithms.
+        Create a normalized betas matrix with the probabilities of being in each
+        state at step k *given* the observations from k+1 to max_k.
         """
-        if not self.L:
-            self.forward(max_k) # Generate self.L
 
-        betas = np.zeros((max_k, 2))
-        max_k -= 1
+        if self.alphas is None:
+            self.alphas, __ = self.forward() # Generate self.L
 
-        beta = np.ones((1, 2))
-        betas[max_k] = beta
+        betas = np.zeros((self.max_k, self.num_states)) # "Vertical" matrix.
+
+        betas[self.max_k-1] = np.ones((1, self.num_states))
         
         Qt = np.transpose(self.Q)
-        for k in xrange(max_k-1, -1, -1):
+        for k in xrange(self.max_k-2, -1, -1):
             # Backward algorithm definition:
-            # beta*k = (lk/lk+1) x Q . beta*k+1 x gk+1
-            beta = np.dot(beta, Qt) * self.g(k) / self.L[k] 
-            betas[k] = beta
+            # beta*k = (lk/lk+1) x Q . beta*k+1 x ek+1
+            betas[k] = \
+                np.dot(betas[k+1], Qt) * self.e[:, self.x[k+1]] / self.L[k] 
+
+            assert sum(betas[k]) > 0
 
         return betas
 
-    def viterbi(self, max_k=len(self.x)):
+    def viterbi(self):
         """
         Viterbi algorithm. Solve the Decoding problem.
         The phi matrix is the scalar product of alpha and beta matrices and
         represents the probability of the model being in a particular state y at
         step k (log score is used to avoid underflow issues).
         The M matrix stores the log score for each step k.
-        The Y vector stores the states with higher log score for each step k,
-        and thus represents the most probable path.
+        The Y matrix stores the states with higher log score for each step k,
+        and thus contains the most probable path given the state at step k+1.
+        The returned vector y contains the most probable absolute path.
         """
 
-        alphas, __ = self.forward(max_k)
-        betas = self.backward(max_k)
-        phi = alphas * betas
-        #lphi = np.log(phi)
-        #le = np.log(self.e)
+        le = np.log(self.e)
         lQ = np.log(self.Q)
-        num_states = np.ndim(lQ)
 
-        # Create M scores matrix. (There...)
-        # Mk+1(y)=max(z<=m){Mk(z)+log(Q(z,y))}+log(phik+1|n(y))
+        # Create M scores matrix.
+        # Mk+1(y)=max(z<=m){Mk(z)+log(Q(z,y))}+log(ek+1|n(y))
+        # Create most probable states matrix.
+        # Yk=argmax(z<=m){Mk(y)+log(Q(z,y(k+1)))}
 
-        # Initialize M scores matrix.
-        M = np.zeros((max_k, 2))
-        M[0] = np.log(self.g(0))#lphi[0]
-        #M[0], curr_state = max(((lphi[0][s], s) for s in xrange(num_states)))
- 
-        # And fill the M scores matrix.
-        for k in xrange(1, max_k):
-            M[k] = [max((M[k-1][z] + lQ[z][y]
-                         for z in xrange(num_states)))
-                    for y in xrange(num_states)] + np.log(self.g(k))
+        self.M = np.zeros((self.max_k, self.num_states)) # "Vertical" matrices.
+        self.Y = np.zeros((self.max_k, self.num_states))
+        self.M[0] = np.log(self.pi) + le[:, self.x[0]]
 
-        # Create most probable states matrix. (... and back again)
-        # yk=argmax(z<=m){Mk(y)+log(Q(z,y(k+1)))}
+        for k in xrange(1, self.max_k):
+            tmp = np.array(
+                    [max(
+                         zip(self.M[k-1] + lQ[:, s],
+                             xrange(self.num_states)))
+                     for s in xrange(self.num_states)])
+            self.M[k] = tmp[:, 0] + le[:, self.x[k]]
+            self.Y[k] = tmp[:, 1]
 
-        # Initialize Y states vector.
-        Y = [0] * max_k
-        max_k -= 1
-        __, Y[max_k] = max(((M[max_k][y], y) for y in xrange(num_states)))
+        # Backtrack through the most probable state sequence.
+        y = [0] * self.max_k
+        __, y[self.max_k-1] = max(
+                                  zip(self.M[self.max_k-1, :],
+                                      xrange(self.num_states))
+                                  )
+        y[self.max_k-1] = int(y[self.max_k-1])
 
-        # And fill the Y states vector.
-        # If there are equally probable states, take the one with the lowest
-        # index. This is somewhat arbitrary, maybe it is better to randomize the
-        # choice.
-        for k in xrange(max_k-1, -1, -1):
-            __, Y[k] = max(((M[k][y] + lQ[y][Y[k+1]], y)
-                            for y in xrange(num_states)))
+        for k in xrange(self.max_k-2, -1, -1):
+            y[k] = int(self.Y[k+1, y[k+1]])
 
         # Return the most probable sequence of states.
-        return Y
+        return y
 
-    def baum_welch(self, max_k=len(self.x)):
+    def baum_welch(self):
         """ Solve the Learning problem """
         """start with equiprobable Q and 90-10 e"""
         """randomly initiaize Q and e, from them, take the observations and
@@ -214,8 +211,10 @@ class HMM():
         a weighted mean. e is a vector length m, the number of states.
         e = sum(phi(k) . g(k)) / n"""
 
-        alphas, __ = self.forward(max_k)
-        betas = self.backward(max_k)
+        if self.betas is None:
+            self.betas = self.backward()
+        #phi = self.alphas * self.betas
+        #lphi = np.log(phi)
         
         phis = np.zeros((2, 2))
         es = np.zeros(2)
@@ -240,6 +239,9 @@ class HMM():
 
 if __name__ == '__main__':
     observations = [int(l) for l in open('simulated_markov_exercise.txt')][:1000]
-    fb = HMM(observations)
+    model = HMM(observations)
+    model.add_pi((0.9,0.1))
+    model.add_e(((0.9,0.1),(0.2,0.8)))
+    model.add_Q(((0.5,0.5),(0.7,0.3)))
 
-    print fb.backward(len(observations))
+    print model.viterbi()
