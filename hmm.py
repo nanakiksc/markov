@@ -127,7 +127,7 @@ class HMM():
             
     def backward(self):
         """
-        Complementary algorith used by the Viterbi and Baum-Welch algorithms.
+        Complementary algorithm used by the Viterbi and Baum-Welch algorithms.
         Create a normalized betas matrix with the probabilities of being in each
         state at step k *given* the observations from k+1 to max_k.
         """
@@ -139,27 +139,28 @@ class HMM():
 
         betas[self.max_k-1] = np.ones((1, self.num_states))
         
-        Qt = np.transpose(self.Q)
+        Qt = self.Q.T
+        eps = np.finfo(np.float32).eps
         for k in xrange(self.max_k-2, -1, -1):
             # Backward algorithm definition:
             # beta*k = (lk/lk+1) x Q . beta*k+1 x ek+1
             betas[k] = \
-                np.dot(betas[k+1], Qt) * self.e[:, self.x[k+1]] / self.L[k] 
+                np.dot(self.Q, betas[k+1] * self.e[:, self.x[k+1]]) \
+                    / self.L[k+1]
 
-            assert sum(betas[k]) > 0
+            assert sum(betas[k]) > 0 \
+                    and abs(sum(self.alphas[k] * betas[k]) - 1.0) < eps
 
         return betas
 
     def viterbi(self):
         """
         Viterbi algorithm. Solve the Decoding problem.
-        The phi matrix is the scalar product of alpha and beta matrices and
-        represents the probability of the model being in a particular state y at
-        step k (log score is used to avoid underflow issues).
         The M matrix stores the log score for each step k.
         The Y matrix stores the states with higher log score for each step k,
         and thus contains the most probable path given the state at step k+1.
-        The returned vector y contains the most probable absolute path.
+        The returned vector y contains the most probable absolute path,
+        backtracked from the most probable state at the final step.
         """
 
         le = np.log(self.e)
@@ -186,7 +187,7 @@ class HMM():
         # Backtrack through the most probable state sequence.
         y = [0] * self.max_k
         __, y[self.max_k-1] = max(
-                                  zip(self.M[self.max_k-1, :],
+                                  zip(self.M[self.max_k-1],
                                       xrange(self.num_states))
                                   )
         y[self.max_k-1] = int(y[self.max_k-1])
@@ -197,51 +198,74 @@ class HMM():
         # Return the most probable sequence of states.
         return y
 
-    def baum_welch(self):
-        """ Solve the Learning problem """
-        """start with equiprobable Q and 90-10 e"""
-        """randomly initiaize Q and e, from them, take the observations and
+    def baum_welch(self, num_states, num_emissions):
+        """
+        Baum-Welch algorithm. Solve the Learning problem.
+        The phi matrix is the scalar product of alpha and beta matrices and
+        represents the probability of the model being in a particular state y at
+        step k (log score is used to avoid underflow).
+        start with equiprobable Q and 90-10 e
+        randomly initialize Q and e, from them, take the observations and
         compute alphas and betas, from them compute the phi(k:k+1) matrices
         (there must be n-1 of them), then sum them all matrices and make them
         stochastic by dividing each value by the sum of each row, we now have a
         new Q and start over again. 
-        phi(k:k+1|n)(i,j) = alpha*k(i) . Q(i,j) . gk+1(j) . beta*k+1(j)
+        ##phi(k:k+1|n)(i,j) = alpha*k(i) . Q(i,j) . ek+1(j) . beta*k+1(j)##
+        phi(k|n)(i) = alpha*k(i) x beta*k(i)
         
         for e, sum all products of phi and e for each k and divide by n. this is
         a weighted mean. e is a vector length m, the number of states.
-        e = sum(phi(k) . g(k)) / n"""
-
-        if self.betas is None:
-            self.betas = self.backward()
-        #phi = self.alphas * self.betas
-        #lphi = np.log(phi)
+        e = sum(phi(k) . e(k)) / n"""
         
-        phis = np.zeros((2, 2))
-        es = np.zeros(2)
-        k=56
-        print alphas
-        print self.Q
-        print self.g(k+1)
-        print betas
-        """
-        for k in xrange(0, max_k-1):
-            phi_k = np.dot(alphas[k], self.Q) * self.g(k+1) * betas[k+1]
-            phis += phi_k
+        rpi = np.random.rand(num_states)
+        rQ = np.random.rand(num_states, num_states)
+        re = np.random.rand(num_states, num_emissions)
+        self.add_pi(rpi / rpi.sum())
+        self.add_Q(rQ / rQ.sum(1)[:, None])
+        self.add_e(re / re.sum(1)[:, None])
 
-            e = np.dot(phi_k, self.g(k))
-            es += e
-        """
-        #self.Q = phis / sum(phis)
-        #self.e = es / max_k
+        em = np.zeros((self.max_k, self.num_emissions))
+        for k in xrange(self.max_k):
+            em[k, self.x[k]] = 1
+        assert em.sum() == self.max_k
 
-        #print self.Q
-        #print self.e
+        eps = np.finfo(np.float32).eps
+        for i in xrange(1000):
+            self.alphas, __ = self.forward()
+            self.betas = self.backward()
+            Qt = self.Q.T
+            Q = np.zeros((self.num_states, self.num_states))
+
+            for k in xrange(self.max_k-1):
+                Q_k = (self.alphas[k] * Qt).T \
+                        * (self.e[:, self.x[k+1]] * self.betas[k+1])
+                Q_k /= self.L[k+1]
+                assert abs(Q_k.sum() - 1.0) < eps 
+                Q += Q_k
+            assert abs(Q.sum() - (self.max_k-1)) < eps
+
+            phi = self.alphas * self.betas
+            phi_norm = phi.sum(0)
+            self.pi = phi[0]
+            self.Q = Q / Q.sum(1)[:, None]
+            self.e = np.dot(phi.T, em) / phi_norm[:, None]
+
+        return self.pi, self.Q, self.e
+
 
 if __name__ == '__main__':
-    observations = [int(l) for l in open('simulated_markov_exercise.txt')][:1000]
+    observations = [int(l) for l in open('test_case.txt')]#[:1000]
     model = HMM(observations)
-    model.add_pi((0.9,0.1))
-    model.add_e(((0.9,0.1),(0.2,0.8)))
-    model.add_Q(((0.5,0.5),(0.7,0.3)))
+    #model.add_pi((0.5, 0.5))
+    #model.add_Q(((0.7, 0.3),
+    #             (0.4, 0.6)))
+    #model.add_e(((0.5, 0.4, 0.1),
+    #             (0.1, 0.3, 0.6)))
 
-    print model.viterbi()
+    #print model.forward()
+    #print model.backward()
+    #print model.viterbi()
+    pi, Q, e = model.baum_welch(2, 3)
+    print "pi", pi
+    print "Q", Q
+    print "e", e

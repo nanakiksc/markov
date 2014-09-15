@@ -22,9 +22,9 @@ class Chain:
 
         self.initial_probs = [p for p in initial_probs]
         self.emissions = []
-        self.transitionsx = []
+        self.transitions = []
         self.num_emissions = 0
-        self.num_states = len(self.initial_probs)
+        self.num_states = 0
         self.current_state = None
 
     def add_state(self, emission_probability, transition_probability):
@@ -78,7 +78,7 @@ class Chain:
         acc = 0
         for em, pr in enumerate(self.emissions[self.current_state]):
             if acc <= r < acc + pr:
-                return em
+                return em#r if em == 1 else em
             acc += pr
 
     def transit(self, state_probs):
@@ -121,12 +121,11 @@ if __name__ == '__main__':
     import sys
 
     # Create the Markov chain with the (optional) initial state probabilities.
-    chain = Chain((1,0))
+    chain = Chain((0.5, 0.5))
 
     # Add the (not so) Hidden States.
-    chain.add_state((1, 0), (0.9, 0.1)) # State 0
-    chain.add_state((0, 1), (0.1, 0.9)) # State 1
-    #chain.add_state((0, 0, 1), (0.3, 0.1, 0.6)) # State 2
+    chain.add_state((1.0, 0.0), (0.95, 0.05)) # State 0
+    chain.add_state((0.0, 1.0), (0.5, 0.5)) # State 1
     
     if len(sys.argv) > 1:
         chain.run(int(sys.argv[1]))
