@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
-# FIX g() function, generalize to multiple emissions.
-# Generalize also to multiple states.
-
 import numpy as np
 
 class HMM():
@@ -198,7 +195,7 @@ class HMM():
         # Return the most probable sequence of states.
         return y
 
-    def baum_welch(self, num_states, num_emissions):
+    def baum_welch(self, num_states, num_emissions, Qconst=None, econst=None):
         """
         Baum-Welch algorithm. Solve the Learning problem.
         The phi matrix is the scalar product of alpha and beta matrices and
@@ -217,6 +214,21 @@ class HMM():
         a weighted mean. e is a vector length m, the number of states.
         e = sum(phi(k) . e(k)) / n"""
         
+        # TODO: Assert constriction matrices consist only in 0 and 1 and that
+        #       row sum is at least 1 (except for the last state transition)
+        #       Check also impossible transition-emission combination for a
+        #       given observation sequence.
+
+        if Qconst is not None:
+            Qconst = np.array(Qconst)
+            assert np.shape(Qconst) == (num_states, num_states)
+            #assert (Qconst == 0 or Qconst == 1).all()
+            #assert (Qconst.sum(1) > 1).all()
+        if econst is not None:
+            econst = np.array(econst)
+            assert np.shape(econst) == (num_states, num_emissions)
+            #assert (econst == 0 or econst == 1).all()
+            #assert (econst.sum(1) > 1).all()
         rpi = np.random.rand(num_states)
         rQ = np.random.rand(num_states, num_states)
         re = np.random.rand(num_states, num_emissions)
@@ -247,14 +259,23 @@ class HMM():
             phi = self.alphas * self.betas
             phi_norm = phi.sum(0)
             self.pi = phi[0]
+            if Qconst is not None:
+                Q *= Qconst
             self.Q = Q / Q.sum(1)[:, None]
             self.e = np.dot(phi.T, em) / phi_norm[:, None]
+            if econst is not None:
+                e = self.e * econst
+                self.e = e / e.sum(1)[:, None]
+
+        assert abs(self.pi.sum() - 1) < eps
+        assert (abs(self.Q.sum(1) - 1) < eps).all()
+        assert (abs(self.e.sum(1) - 1) < eps).all()
 
         return self.pi, self.Q, self.e
 
 
 if __name__ == '__main__':
-    observations = [int(l) for l in open('test_case.txt')]#[:1000]
+    observations = [int(l) for l in open('test_case.txt')]
     model = HMM(observations)
     #model.add_pi((0.5, 0.5))
     #model.add_Q(((0.7, 0.3),
@@ -265,7 +286,12 @@ if __name__ == '__main__':
     #print model.forward()
     #print model.backward()
     #print model.viterbi()
-    pi, Q, e = model.baum_welch(2, 3)
-    print "pi", pi
-    print "Q", Q
-    print "e", e
+    #pi, Q, e = model.baum_welch(2, 3,
+    #        Qconst=((1,1),
+    #                (1,1)),
+    #        econst=((1,1,1),
+    #                (1,1,1))
+    #        )
+    print pi
+    print Q
+    print e
